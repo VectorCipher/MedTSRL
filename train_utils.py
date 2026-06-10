@@ -38,7 +38,7 @@ def eval_loader(model, loader, device, thr=0.5, min_area=20, iou_thr=0.5):
             imgs = batch["img"].to(device, non_blocking=True)
             gt_boxes_list = batch["boxes"]
 
-            pred_den, pred_msk_logit = model(imgs)
+            pred_den, pred_msk_logit, _ = model(imgs)
             pd = pred_den.detach().cpu().numpy()  # [B,1,H,W]
 
             for i in range(pd.shape[0]):
