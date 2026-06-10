@@ -111,7 +111,7 @@ def detect_manipulation_density(
     x, _ = preprocess_gray_128(image_path, img_size=128)
     x = x.to(device)
 
-    pred_den, _ = model(x)
+    pred_den, _, _= model(x)
     den = pred_den[0,0].detach().cpu().numpy().astype(np.float32)  # [H,W] in [0,1]
     den01 = den / (den.max() + 1e-8)
 
