@@ -168,6 +168,9 @@ def main():
                 # Per-sample loss (unreduced)
                 loss_den_sample = F.smooth_l1_loss(init_pred_den, gt_den, reduction='none').mean(dim=(1,2,3))
                 loss_msk_sample = F.binary_cross_entropy_with_logits(init_pred_msk_logit, gt_msk, reduction='none').mean(dim=(1,2,3))
+                loss_tv_sample = (init_pred_den[:,:,1:,:]-init_pred_den[:,:,:-1,:]).abs().mean(dim=(1,2,3)) + \
+                                 (init_pred_den[:,:,:,1:]-init_pred_den[:,:,:,:-1]).abs().mean(dim=(1,2,3))
+                init_loc_loss_sample = loss_den_sample + 1.0 * loss_msk_sample + 0.05 * loss_tv_sample
 
                 # Extract GAP features for state: [B, 128, 32, 32] -> [B, 128]
                 gap_feat = F.adaptive_avg_pool2d(init_feat, (1, 1)).flatten(1)
@@ -239,7 +242,7 @@ def main():
                 indices, 
                 current_dice=init_dice, 
                 current_iou=init_iou, 
-                current_loc_loss=loss_msk_sample, 
+                current_loc_loss=init_loc_loss_sample,
                 current_den_loss=loss_den_sample, 
                 current_confidence=init_conf
             )
