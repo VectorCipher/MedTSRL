@@ -89,6 +89,7 @@ def main():
     parser.add_argument("--data_dir", type=str, required=True, help="Path to dataset")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--warmup_epochs", type=int, default=10, help="Epochs to train student normally before RL")
+    parser.add_argument("--bc_epochs", type=int, default=5, help="Epochs to train Tutor using Behavioral Cloning")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="./weights")
@@ -142,7 +143,9 @@ def main():
         student_model.train()
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{args.epochs}")
         
-        is_rl_stage = epoch > args.warmup_epochs
+        is_warmup_stage = epoch <= args.warmup_epochs
+        is_bc_stage = args.warmup_epochs < epoch <= (args.warmup_epochs + args.bc_epochs)
+        is_rl_stage = epoch > (args.warmup_epochs + args.bc_epochs)
         
         for batch in pbar:
             imgs = batch["img"].to(device, non_blocking=True)
@@ -186,13 +189,24 @@ def main():
                     historical_states['confidence'].unsqueeze(1)
                 ], dim=1)
 
-            # --- Tutor Action ---
+            # --- Tutor Action / BC Training ---
+            bc_loss_val = None
             if is_rl_stage:
                 weights_np, _ = tutor_model.select_action(state_s)
                 weights = torch.from_numpy(weights_np).to(device).float()
             else:
-                # Warmup: w = 1.0
+                # Warmup and BC: w = 1.0
                 weights = torch.ones(imgs.shape[0], device=device).float()
+
+            if is_bc_stage:
+                # Calculate expert weights
+                difficulty = 0.4 * (1.0 - historical_states['iou']) + \
+                             0.4 * (1.0 - historical_states['dice']) + \
+                             0.2 * historical_states['loc_loss']
+                expert_weights = torch.clamp(difficulty, 0.0, 1.0).to(device)
+                
+                # Update Tutor Actor via BC
+                bc_loss_val = tutor_model.bc_update(state_s, expert_weights)
 
             # --- Student Update ---
             student_model.train()
@@ -247,7 +261,10 @@ def main():
                 current_confidence=init_conf
             )
             
-            pbar.set_postfix(w_loss=weighted_loss.item())
+            if is_bc_stage and bc_loss_val is not None:
+                pbar.set_postfix(w_loss=weighted_loss.item(), bc_loss=bc_loss_val)
+            else:
+                pbar.set_postfix(w_loss=weighted_loss.item())
 
         # End of Epoch
         if is_rl_stage:
