@@ -279,6 +279,12 @@ def main():
                     f"Weight Min: {epoch_w.min():.3f} | "
                     f"Weight Max: {epoch_w.max():.3f}"
                 )
+            if len(tutor_model.buffer.rewards) > 0:
+                epoch_r = np.array(tutor_model.buffer.rewards)
+                print(
+                    f"Reward Mean: {epoch_r.mean():.4f} | "
+                    f"Reward Std: {epoch_r.std():.4f}"
+                )
             print(f"Updating Tutor PPO Policy...")
             tutor_model.update()
 
