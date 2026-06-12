@@ -147,6 +147,8 @@ def main():
         is_bc_stage = args.warmup_epochs < epoch <= (args.warmup_epochs + args.bc_epochs)
         is_rl_stage = epoch > (args.warmup_epochs + args.bc_epochs)
         
+        all_epoch_weights = []
+        
         for batch in pbar:
             imgs = batch["img"].to(device, non_blocking=True)
             gt_den = batch["den"].to(device, non_blocking=True)
@@ -194,6 +196,7 @@ def main():
             if is_rl_stage:
                 weights_np, _ = tutor_model.select_action(state_s)
                 weights = torch.from_numpy(weights_np).to(device).float()
+                all_epoch_weights.append(weights.detach().cpu())
             else:
                 # Warmup and BC: w = 1.0
                 weights = torch.ones(imgs.shape[0], device=device).float()
@@ -268,6 +271,14 @@ def main():
 
         # End of Epoch
         if is_rl_stage:
+            if len(all_epoch_weights) > 0:
+                epoch_w = torch.cat(all_epoch_weights)
+                print(
+                    f"Weight Mean: {epoch_w.mean():.3f} | "
+                    f"Weight Std: {epoch_w.std():.3f} | "
+                    f"Weight Min: {epoch_w.min():.3f} | "
+                    f"Weight Max: {epoch_w.max():.3f}"
+                )
             print(f"Updating Tutor PPO Policy...")
             tutor_model.update()
 
