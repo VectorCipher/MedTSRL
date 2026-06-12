@@ -173,6 +173,22 @@ class TutorPPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         self.buffer.clear()
 
+    def bc_update(self, states, expert_weights):
+        """
+        Behavioral Cloning update step.
+        Trains the actor to output the expert_weights using MSE loss.
+        """
+        self.optimizer.zero_grad()
+        predicted_weights = self.policy.actor(states).squeeze()
+        loss = self.MseLoss(predicted_weights, expert_weights)
+        loss.backward()
+        self.optimizer.step()
+        
+        # Keep policy_old synchronized during BC
+        self.policy_old.load_state_dict(self.policy.state_dict())
+        
+        return loss.item()
+
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
 
