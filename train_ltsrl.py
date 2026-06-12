@@ -57,7 +57,7 @@ def calculate_dice(pred_msk, gt_msk):
     dice = (2. * intersection + 1e-6) / (union + 1e-6)
     return dice.squeeze(1)
 
-def calculate_batch_iou_and_recall(pred_den, gt_boxes_list, thr=0.28, min_area=20):
+def calculate_batch_iou_and_recall(pred_den, gt_boxes_list, thr=0.1, min_area=20):
     pd = pred_den.detach().cpu().numpy()
     ious = []
     recalls = []
@@ -291,7 +291,7 @@ def main():
         # Validate
         from dataset import collate_keep_boxes
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, collate_fn=collate_keep_boxes)
-        val_metrics = eval_loader(student_model, val_loader, device, thr=0.28, min_area=20)
+        val_metrics = eval_loader(student_model, val_loader, device, thr=0.1, min_area=20)
         f1 = val_metrics['F1@0.5']
         print(f"\nEpoch {epoch} Validation: F1@0.5: {f1:.4f}")
         
