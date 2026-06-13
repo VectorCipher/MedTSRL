@@ -249,7 +249,7 @@ def main():
                     delta_dice = new_dice - init_dice
                     delta_iou = new_iou - init_iou
                     delta_recall = new_recall - init_recall
-                    rewards = 0.5 * delta_iou + 0.3 * delta_dice + 0.2 * delta_recall
+                    rewards = 100 * [0.5 * delta_iou + 0.3 * delta_dice + 0.2 * delta_recall]
                     
                     tutor_model.buffer.rewards.extend(rewards.cpu().numpy())
                     tutor_model.buffer.is_terminals.extend([True] * len(rewards))
