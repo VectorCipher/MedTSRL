@@ -74,14 +74,16 @@ class ActorCritic(nn.Module):
         dist_entropy = dist.entropy()
         state_values = self.critic(state)
         
-        return action_logprobs, state_values, dist_entropy
+        return action_logprobs, state_values, dist_entropy, action_mean
 
 class TutorPPO:
-    def __init__(self, state_dim, action_dim, lr_actor=0.0001, lr_critic=0.0003, gamma=0.99, epochs=8, eps_clip=0.2, mini_batch_size=64):
+    def __init__(self, state_dim, action_dim, lr_actor=0.0001, lr_critic=0.0003, gamma=0.99, epochs=8, eps_clip=0.2, mini_batch_size=64, kl_coef=0.05):
         self.gamma = gamma
         self.epochs = epochs
         self.eps_clip = eps_clip
         self.mini_batch_size = mini_batch_size
+        self.kl_coef = kl_coef
+        self.bc_actor = None
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -152,7 +154,7 @@ class TutorPPO:
                 mb_logprobs = old_logprobs[mb_indices].to(self.device)
                 mb_rewards = rewards[mb_indices].to(self.device)
 
-                logprobs, state_values, dist_entropy = self.policy.evaluate(mb_states, mb_actions)
+                logprobs, state_values, dist_entropy, action_mean = self.policy.evaluate(mb_states, mb_actions)
                 state_values = torch.squeeze(state_values)
                 
                 # Handle single element batch size squeeze bug
@@ -165,6 +167,12 @@ class TutorPPO:
                 surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * mb_rewards
 
                 loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, mb_rewards) - 0.01 * dist_entropy
+                
+                if self.bc_actor is not None:
+                    with torch.no_grad():
+                        bc_action_mean = self.bc_actor(mb_states)
+                    kl_penalty = self.MseLoss(action_mean, bc_action_mean)
+                    loss = loss + self.kl_coef * kl_penalty
                 
                 self.optimizer.zero_grad()
                 loss.mean().backward()
@@ -188,6 +196,12 @@ class TutorPPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         return loss.item()
+
+    def freeze_bc_policy(self):
+        import copy
+        self.bc_actor = copy.deepcopy(self.policy.actor)
+        for param in self.bc_actor.parameters():
+            param.requires_grad = False
 
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
