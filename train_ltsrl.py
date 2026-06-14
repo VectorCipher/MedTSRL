@@ -90,6 +90,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--warmup_epochs", type=int, default=10, help="Epochs to train student normally before RL")
     parser.add_argument("--bc_epochs", type=int, default=5, help="Epochs to train Tutor using Behavioral Cloning")
+    parser.add_argument("--kl_coef", type=float, default=0.05, help="KL divergence penalty coefficient for PPO vs BC policy")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="./weights")
@@ -131,7 +132,7 @@ def main():
 
     # State Dim: 128 (GAP features) + 1 (Dice) + 1 (IoU) + 1 (LocLoss) + 1 (DenLoss) + 1 (Confidence) = 133
     state_dim = 133
-    tutor_model = TutorPPO(state_dim=state_dim, action_dim=1).to(device)
+    tutor_model = TutorPPO(state_dim=state_dim, action_dim=1, kl_coef=args.kl_coef).to(device)
     state_manager = StateManager(num_samples=len(train_ds_orig), device=device)
 
     os.makedirs(args.save_dir, exist_ok=True)
@@ -287,6 +288,10 @@ def main():
                 )
             print(f"Updating Tutor PPO Policy...")
             tutor_model.update()
+
+        if epoch == args.warmup_epochs + args.bc_epochs:
+            print("Freezing BC Policy to enforce KL constraint during RL...")
+            tutor_model.freeze_bc_policy()
 
         # Validate
         from dataset import collate_keep_boxes
